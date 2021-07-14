@@ -4,8 +4,9 @@
 package edit
 
 import (
+	"io"
+
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/kustomize/api/filesys"
 	"sigs.k8s.io/kustomize/api/ifc"
 	"sigs.k8s.io/kustomize/api/kv"
 	"sigs.k8s.io/kustomize/api/loader"
@@ -15,11 +16,13 @@ import (
 	"sigs.k8s.io/kustomize/kustomize/v4/commands/edit/listbuiltin"
 	"sigs.k8s.io/kustomize/kustomize/v4/commands/edit/remove"
 	"sigs.k8s.io/kustomize/kustomize/v4/commands/edit/set"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 // NewCmdEdit returns an instance of 'edit' subcommand.
 func NewCmdEdit(
-	fSys filesys.FileSystem, v ifc.Validator, rf *resource.Factory) *cobra.Command {
+	fSys filesys.FileSystem, v ifc.Validator, rf *resource.Factory,
+	w io.Writer) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "edit",
 		Short: "Edits a kustomization file",
@@ -46,7 +49,7 @@ func NewCmdEdit(
 			fSys,
 			kv.NewLoader(loader.NewFileLoaderAtCwd(fSys), v),
 			v),
-		fix.NewCmdFix(fSys),
+		fix.NewCmdFix(fSys, w),
 		remove.NewCmdRemove(fSys, v),
 		listbuiltin.NewCmdListBuiltinPlugin(),
 	)

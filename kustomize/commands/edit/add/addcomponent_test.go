@@ -4,11 +4,12 @@
 package add
 
 import (
-	"strings"
 	"testing"
 
-	"sigs.k8s.io/kustomize/api/filesys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	testutils_test "sigs.k8s.io/kustomize/kustomize/v4/commands/internal/testutils"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 const (
@@ -21,67 +22,48 @@ sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 
 func TestAddComponentHappyPath(t *testing.T) {
 	fSys := filesys.MakeEmptyDirInMemory()
-	fSys.WriteFile(componentFileName, []byte(componentFileContent))
-	fSys.WriteFile(componentFileName+"another", []byte(componentFileContent))
+	err := fSys.WriteFile(componentFileName, []byte(componentFileContent))
+	require.NoError(t, err)
+	err = fSys.WriteFile(componentFileName+"another", []byte(componentFileContent))
+	require.NoError(t, err)
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddComponent(fSys)
 	args := []string{componentFileName + "*"}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Errorf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 	content, err := testutils_test.ReadTestKustomization(fSys)
-	if err != nil {
-		t.Errorf("unexpected read error: %v", err)
-	}
-	if !strings.Contains(string(content), componentFileName) {
-		t.Errorf("expected component name in kustomization")
-	}
-	if !strings.Contains(string(content), componentFileName+"another") {
-		t.Errorf("expected component name in kustomization")
-	}
+	assert.NoError(t, err)
+	assert.Contains(t, string(content), componentFileName)
+	assert.Contains(t, string(content), componentFileName+"another")
 }
 
 func TestAddComponentAlreadyThere(t *testing.T) {
 	fSys := filesys.MakeFsInMemory()
-	fSys.WriteFile(componentFileName, []byte(componentFileContent))
+	err := fSys.WriteFile(componentFileName, []byte(componentFileContent))
+	require.NoError(t, err)
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddComponent(fSys)
 	args := []string{componentFileName}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Fatalf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 
 	// adding an existing component doesn't return an error
-	err = cmd.RunE(cmd, args)
-	if err != nil {
-		t.Errorf("unexpected cmd error :%v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 }
 
 func TestAddKustomizationFileAsComponent(t *testing.T) {
 	fSys := filesys.MakeFsInMemory()
-	fSys.WriteFile(componentFileName, []byte(componentFileContent))
+	err := fSys.WriteFile(componentFileName, []byte(componentFileContent))
+	require.NoError(t, err)
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddComponent(fSys)
 	args := []string{componentFileName}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Fatalf("unexpected cmd error: %v", err)
-	}
+	require.NoError(t, cmd.RunE(cmd, args))
 
 	content, err := testutils_test.ReadTestKustomization(fSys)
-	if err != nil {
-		t.Errorf("unexpected read error: %v", err)
-	}
-
-	if strings.Contains(string(content), componentFileName) {
-		t.Errorf("%v shouldn't be in the list of the components", componentFileName)
-	}
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), componentFileName)
 }
 
 func TestAddComponentNoArgs(t *testing.T) {
@@ -89,10 +71,5 @@ func TestAddComponentNoArgs(t *testing.T) {
 
 	cmd := newCmdAddComponent(fSys)
 	err := cmd.Execute()
-	if err == nil {
-		t.Errorf("expected error: %v", err)
-	}
-	if err.Error() != "must specify a component file" {
-		t.Errorf("incorrect error: %v", err.Error())
-	}
+	assert.EqualError(t, err, "must specify a component file")
 }

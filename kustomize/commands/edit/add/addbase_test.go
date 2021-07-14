@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"sigs.k8s.io/kustomize/api/filesys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kustomize/kustomize/v4/commands/internal/kustfile"
 	testutils_test "sigs.k8s.io/kustomize/kustomize/v4/commands/internal/testutils"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 const (
@@ -20,25 +22,19 @@ func TestAddBaseHappyPath(t *testing.T) {
 	fSys := filesys.MakeFsInMemory()
 	bases := strings.Split(baseDirectoryPaths, ",")
 	for _, base := range bases {
-		fSys.Mkdir(base)
+		err := fSys.Mkdir(base)
+		require.NoError(t, err)
 	}
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddBase(fSys)
 	args := []string{baseDirectoryPaths}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Errorf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 	content, err := testutils_test.ReadTestKustomization(fSys)
-	if err != nil {
-		t.Errorf("unexpected read error: %v", err)
-	}
+	assert.NoError(t, err)
 
 	for _, base := range bases {
-		if !strings.Contains(string(content), base) {
-			t.Errorf("expected base name in kustomization")
-		}
+		assert.Contains(t, string(content), base)
 	}
 }
 
@@ -47,28 +43,21 @@ func TestAddBaseAlreadyThere(t *testing.T) {
 	// Create fake directories
 	bases := strings.Split(baseDirectoryPaths, ",")
 	for _, base := range bases {
-		fSys.Mkdir(base)
+		err := fSys.Mkdir(base)
+		require.NoError(t, err)
 	}
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddBase(fSys)
 	args := []string{baseDirectoryPaths}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Fatalf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 	// adding an existing base should return an error
-	err = cmd.RunE(cmd, args)
-	if err == nil {
-		t.Errorf("expected already there problem")
-	}
+	assert.Error(t, cmd.RunE(cmd, args))
 	var expectedErrors []string
 	for _, base := range bases {
 		msg := "base " + base + " already in kustomization file"
 		expectedErrors = append(expectedErrors, msg)
-		if !kustfile.StringInSlice(msg, expectedErrors) {
-			t.Errorf("unexpected error %v", err)
-		}
+		assert.True(t, kustfile.StringInSlice(msg, expectedErrors))
 	}
 }
 
@@ -77,10 +66,6 @@ func TestAddBaseNoArgs(t *testing.T) {
 
 	cmd := newCmdAddBase(fSys)
 	err := cmd.Execute()
-	if err == nil {
-		t.Errorf("expected error: %v", err)
-	}
-	if err.Error() != "must specify a base directory" {
-		t.Errorf("incorrect error: %v", err.Error())
-	}
+	assert.Error(t, err)
+	assert.Equal(t, "must specify a base directory", err.Error())
 }

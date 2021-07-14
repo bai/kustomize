@@ -261,3 +261,224 @@ spec:
         name: nginx
 `)
 }
+
+func TestReplacementTransformerWithOriginalName(t *testing.T) {
+	th := kusttest_test.MakeEnhancedHarness(t)
+	defer th.Reset()
+
+	th.WriteF("base/deployments.yaml", `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target
+spec:
+  template:
+    spec:
+      containers:
+      - image: nginx:oldtag
+        name: nginx
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: source
+spec:
+  template:
+    spec:
+      containers:
+      - image: nginx:newtag
+        name: nginx
+`)
+	th.WriteK("base", `
+resources:
+- deployments.yaml
+`)
+	th.WriteK("overlay", `
+namePrefix: prefix1-
+resources:
+- ../base
+`)
+
+	th.WriteK(".", `
+namePrefix: prefix2-
+resources:
+- overlay
+replacements:
+- path: replacement.yaml
+`)
+	th.WriteF("replacement.yaml", `
+source:
+  name: source
+  fieldPath: spec.template.spec.containers.0.image
+targets:
+- select:
+    name: prefix1-target
+  fieldPaths:
+  - spec.template.spec.containers.[name=nginx].image
+`)
+
+	m := th.Run(".", th.MakeDefaultOptions())
+	th.AssertActualEqualsExpected(m, `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefix2-prefix1-target
+spec:
+  template:
+    spec:
+      containers:
+      - image: nginx:newtag
+        name: nginx
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefix2-prefix1-source
+spec:
+  template:
+    spec:
+      containers:
+      - image: nginx:newtag
+        name: nginx
+`)
+}
+
+// TODO: Address namePrefix in overlay not applying to replacement targets
+// The property `data.blue-name` should end up being `overlay-blue` instead of `blue`
+// https://github.com/kubernetes-sigs/kustomize/issues/4034
+func TestReplacementTransformerWithNamePrefixOverlay(t *testing.T) {
+	th := kusttest_test.MakeEnhancedHarness(t)
+	defer th.Reset()
+
+	th.WriteK("base", `
+generatorOptions:
+ disableNameSuffixHash: true
+configMapGenerator:
+- name: blue
+- name: red
+replacements:
+- source:
+    kind: ConfigMap
+    name: blue
+    fieldPath: metadata.name
+  targets:
+  - select:
+      name: red
+    fieldPaths:
+    - data.blue-name
+    options:
+      create: true
+`)
+
+	th.WriteK(".", `
+namePrefix: overlay-
+resources:
+- base
+`)
+	m := th.Run(".", th.MakeDefaultOptions())
+	th.AssertActualEqualsExpected(m, `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: overlay-blue
+---
+apiVersion: v1
+data:
+  blue-name: blue
+kind: ConfigMap
+metadata:
+  name: overlay-red
+`)
+}
+
+// TODO: Address namespace in overlay not applying to replacement targets
+// The property `data.blue-namespace` should end up being `overlay-namespace` instead of `base-namespace`
+// https://github.com/kubernetes-sigs/kustomize/issues/4034
+func TestReplacementTransformerWithNamespaceOverlay(t *testing.T) {
+	th := kusttest_test.MakeEnhancedHarness(t)
+	defer th.Reset()
+
+	th.WriteK("base", `
+namespace: base-namespace
+generatorOptions:
+ disableNameSuffixHash: true
+configMapGenerator:
+- name: blue
+- name: red
+replacements:
+- source:
+    kind: ConfigMap
+    name: blue
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      name: red
+    fieldPaths:
+    - data.blue-namespace
+    options:
+      create: true
+`)
+
+	th.WriteK(".", `
+namespace: overlay-namespace
+resources:
+- base
+`)
+	m := th.Run(".", th.MakeDefaultOptions())
+	th.AssertActualEqualsExpected(m, `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blue
+  namespace: overlay-namespace
+---
+apiVersion: v1
+data:
+  blue-namespace: base-namespace
+kind: ConfigMap
+metadata:
+  name: red
+  namespace: overlay-namespace
+`)
+}
+
+// TODO: Address configMapGenerator suffix not applying to replacement targets
+// The property `data.blue-name` should end up being `blue-6ct58987ht` instead of `blue`
+// https://github.com/kubernetes-sigs/kustomize/issues/4034
+func TestReplacementTransformerWithConfigMapGenerator(t *testing.T) {
+	th := kusttest_test.MakeEnhancedHarness(t)
+	defer th.Reset()
+
+	th.WriteK(".", `
+configMapGenerator:
+- name: blue
+- name: red
+replacements:
+- source:
+    kind: ConfigMap
+    name: blue
+    fieldPath: metadata.name
+  targets:
+  - select:
+      name: red
+    fieldPaths:
+    - data.blue-name
+    options:
+      create: true
+`)
+
+	m := th.Run(".", th.MakeDefaultOptions())
+	th.AssertActualEqualsExpected(m, `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blue-6ct58987ht
+---
+apiVersion: v1
+data:
+  blue-name: blue
+kind: ConfigMap
+metadata:
+  name: red-dc6gc5btkc
+`)
+}

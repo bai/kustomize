@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"sigs.k8s.io/kustomize/api/internal/utils"
 	"sigs.k8s.io/kustomize/api/provider"
-	"sigs.k8s.io/kustomize/api/resid"
 	. "sigs.k8s.io/kustomize/api/resource"
 	"sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
 var factory = provider.NewDefaultDepProvider().GetResourceFactory()
@@ -87,11 +88,13 @@ func TestResourceId(t *testing.T) {
 		{
 			in: testConfigMap,
 			id: resid.NewResIdWithNamespace(
-				resid.Gvk{Version: "v1", Kind: "ConfigMap"}, "winnie", "hundred-acre-wood"),
+				resid.NewGvk("", "v1", "ConfigMap"),
+				"winnie", "hundred-acre-wood"),
 		},
 		{
 			in: testDeployment,
-			id: resid.NewResId(resid.Gvk{Group: "apps", Version: "v1", Kind: "Deployment"}, "pooh"),
+			id: resid.NewResId(
+				resid.NewGvk("apps", "v1", "Deployment"), "pooh"),
 		},
 	}
 	for _, test := range tests {
@@ -1075,7 +1078,7 @@ func TestSameEndingSubarray(t *testing.T) {
 	for n := range testCases {
 		tc := testCases[n]
 		t.Run(n, func(t *testing.T) {
-			assert.Equal(t, tc.expected, SameEndingSubarray(tc.a, tc.b))
+			assert.Equal(t, tc.expected, utils.SameEndingSubSlice(tc.a, tc.b))
 		})
 	}
 }
@@ -1129,4 +1132,42 @@ spec:
 	if expected, actual := "knd", gvk.Kind; expected != actual {
 		t.Fatalf("expected '%s', got '%s'", expected, actual)
 	}
+}
+
+func TestRefBy(t *testing.T) {
+	r, err := factory.FromBytes([]byte(`
+apiVersion: v1
+kind: Deployment
+metadata:
+  name: clown
+spec:
+  numReplicas: 1
+`))
+	assert.NoError(t, err)
+	r.AppendRefBy(resid.FromString("gr1_ver1_knd1|ns1|name1"))
+	assert.Equal(t, r.RNode.MustString(), `apiVersion: v1
+kind: Deployment
+metadata:
+  name: clown
+  annotations:
+    config.kubernetes.io/refBy: gr1_ver1_knd1|ns1|name1
+spec:
+  numReplicas: 1
+`)
+	assert.Equal(t, r.GetRefBy(), []resid.ResId{resid.FromString("gr1_ver1_knd1|ns1|name1")})
+
+	r.AppendRefBy(resid.FromString("gr2_ver2_knd2|ns2|name2"))
+	assert.Equal(t, r.RNode.MustString(), `apiVersion: v1
+kind: Deployment
+metadata:
+  name: clown
+  annotations:
+    config.kubernetes.io/refBy: gr1_ver1_knd1|ns1|name1,gr2_ver2_knd2|ns2|name2
+spec:
+  numReplicas: 1
+`)
+	assert.Equal(t, r.GetRefBy(), []resid.ResId{
+		resid.FromString("gr1_ver1_knd1|ns1|name1"),
+		resid.FromString("gr2_ver2_knd2|ns2|name2"),
+	})
 }

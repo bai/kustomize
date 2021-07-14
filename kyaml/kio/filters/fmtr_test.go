@@ -416,12 +416,12 @@ spec:
         image: nginx:1.7.9
         ports:
         - containerPort: 80
+      # this is a container
       - name: b-nginx
         image: nginx:1.7.9
-        # this is a container
         ports:
-        - # this is a port
-          containerPort: 80
+        # this is a port
+        - containerPort: 80
 `
 	s, err := FormatInput(strings.NewReader(y))
 	assert.NoError(t, err)
@@ -743,8 +743,8 @@ func TestFormatFileOrDirectory_ymlExtFile(t *testing.T) {
 	assert.Equal(t, string(testyaml.FormattedYaml1), string(b))
 }
 
-// TestFormatFileOrDirectory_skipYamlExtFileWithJson verifies that the json content is formatted
-// as yaml
+// TestFormatFileOrDirectory_YamlExtFileWithJson verifies that the JSON compatible flow style
+// YAML content is formatted as such.
 func TestFormatFileOrDirectory_YamlExtFileWithJson(t *testing.T) {
 	// write the unformatted JSON file contents
 	f, err := ioutil.TempFile("", "yamlfmt*.yaml")
@@ -760,7 +760,27 @@ func TestFormatFileOrDirectory_YamlExtFileWithJson(t *testing.T) {
 	// check the result is formatted as yaml
 	b, err := ioutil.ReadFile(f.Name())
 	assert.NoError(t, err)
-	assert.Equal(t, string(testyaml.FormattedJSON1), string(b))
+	assert.Equal(t, string(testyaml.FormattedFlowYAML1), string(b))
+}
+
+// TestFormatFileOrDirectory_JsonExtFileWithNotModified verifies that a file with .json extensions
+// and JSON contents won't be modified.
+func TestFormatFileOrDirectory_JsonExtFileWithNotModified(t *testing.T) {
+	// write the unformatted JSON file contents
+	f, err := ioutil.TempFile("", "yamlfmt*.json")
+	assert.NoError(t, err)
+	defer os.Remove(f.Name())
+	err = ioutil.WriteFile(f.Name(), testyaml.UnformattedJSON1, 0600)
+	assert.NoError(t, err)
+
+	// format the file
+	err = FormatFileOrDirectory(f.Name())
+	assert.NoError(t, err)
+
+	// check the result is formatted as yaml
+	b, err := ioutil.ReadFile(f.Name())
+	assert.NoError(t, err)
+	assert.Equal(t, string(testyaml.UnformattedJSON1), string(b))
 }
 
 // TestFormatFileOrDirectory_partialKubernetesYamlFile verifies that if a yaml file contains both
@@ -854,6 +874,7 @@ func TestFormatFileOrDirectory_skipJsonExtFile(t *testing.T) {
 func TestFormatFileOrDirectory_directory(t *testing.T) {
 	d, err := ioutil.TempDir("", "yamlfmt")
 	assert.NoError(t, err)
+	defer os.RemoveAll(d)
 
 	err = os.Mkdir(filepath.Join(d, "config"), 0700)
 	assert.NoError(t, err)
@@ -1026,4 +1047,53 @@ metadata:
 				strings.TrimSpace(string(b)))
 		})
 	}
+}
+
+func TestFormatInput_NullCases(t *testing.T) {
+	y := `
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: null
+spec:
+  selector:
+    app: nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: ~
+    nodePort: null
+  allocateLoadBalancerNodePorts: null
+`
+
+	// keep the style on values that parse as non-string types
+	expected := `apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: null
+spec:
+  selector:
+    app: nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: ~
+    nodePort: null
+  allocateLoadBalancerNodePorts: null
+`
+
+	buff := &bytes.Buffer{}
+	err := kio.Pipeline{
+		Inputs: []kio.Reader{&kio.ByteReader{Reader: strings.NewReader(y)}},
+		Filters: []kio.Filter{FormatFilter{
+			UseSchema: true,
+		}},
+		Outputs: []kio.Writer{kio.ByteWriter{Writer: buff}},
+	}.Execute()
+	assert.NoError(t, err)
+	assert.Equal(t, expected, buff.String())
 }

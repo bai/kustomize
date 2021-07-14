@@ -9,9 +9,9 @@ import (
 
 	"sigs.k8s.io/kustomize/api/internal/plugins/builtinconfig"
 	"sigs.k8s.io/kustomize/api/provider"
-	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/resmap"
 	resmaptest_test "sigs.k8s.io/kustomize/api/testutils/resmaptest"
+	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
 const notEqualErrFmt = "expected (self) doesn't match actual (other): %v"
@@ -885,9 +885,9 @@ func TestNameReferenceClusterWide(t *testing.T) {
 			}).ResMap()
 
 	clusterRoleId := resid.NewResId(
-		resid.Gvk{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, modifiedname)
+		resid.NewGvk("rbac.authorization.k8s.io", "v1", "ClusterRole"), modifiedname)
 	clusterRoleBindingId := resid.NewResId(
-		resid.Gvk{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}, modifiedname)
+		resid.NewGvk("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"), modifiedname)
 	clusterRole, _ := expected.GetByCurrentId(clusterRoleId)
 	clusterRole.AppendRefBy(clusterRoleBindingId)
 
@@ -897,7 +897,9 @@ func TestNameReferenceClusterWide(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	expected.RemoveBuildAnnotations()
 	m.RemoveBuildAnnotations()
+
 	if err = expected.ErrorIfNotEqualLists(m); err != nil {
 		t.Fatalf(notEqualErrFmt, err)
 	}
@@ -1012,9 +1014,11 @@ func TestNameReferenceNamespaceTransformation(t *testing.T) {
 			}).ResMap()
 
 	clusterRoleId := resid.NewResId(
-		resid.Gvk{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, modifiedname)
+		resid.NewGvk("rbac.authorization.k8s.io", "v1", "ClusterRole"),
+		modifiedname)
 	clusterRoleBindingId := resid.NewResId(
-		resid.Gvk{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding"}, modifiedname)
+		resid.NewGvk("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"),
+		modifiedname)
 	clusterRole, _ := expected.GetByCurrentId(clusterRoleId)
 	clusterRole.AppendRefBy(clusterRoleBindingId)
 

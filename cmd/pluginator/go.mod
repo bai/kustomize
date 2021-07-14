@@ -5,9 +5,9 @@ go 1.16
 require (
 	github.com/rakyll/statik v0.1.7
 	github.com/spf13/cobra v1.0.0
-	github.com/stretchr/testify v1.4.0
-	sigs.k8s.io/kustomize/api v0.8.8
-	sigs.k8s.io/kustomize/kyaml v0.10.17
+	github.com/stretchr/testify v1.5.1
+	sigs.k8s.io/kustomize/api v0.8.11
+	sigs.k8s.io/kustomize/kyaml v0.11.0
 )
 
 replace sigs.k8s.io/kustomize/api => ../../api

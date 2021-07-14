@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 
 	"sigs.k8s.io/kustomize/kyaml/errors"
 	"sigs.k8s.io/kustomize/kyaml/fn/framework"
 	"sigs.k8s.io/kustomize/kyaml/fn/framework/command"
+	"sigs.k8s.io/kustomize/kyaml/fn/framework/parser"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -179,7 +181,7 @@ func ExampleTemplateProcessor_generate_inline() {
 		TemplateData: api,
 		// Templates
 		ResourceTemplates: []framework.ResourceTemplate{{
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -220,9 +222,7 @@ func ExampleTemplateProcessor_generate_files() {
 		TemplateData: api,
 		// Templates
 		ResourceTemplates: []framework.ResourceTemplate{{
-			Templates: framework.TemplatesFromFile(
-				filepath.Join("testdata", "example", "templatefiles", "deployment.template"),
-			),
+			Templates: parser.TemplateFiles("testdata/example/templatefiles/deployment.template.yaml"),
 		}},
 	}
 	cmd := command.Build(templateFn, command.StandaloneEnabled, false)
@@ -233,6 +233,9 @@ func ExampleTemplateProcessor_generate_files() {
 	}
 
 	// Output:
+	// # Copyright 2021 The Kubernetes Authors.
+	// # SPDX-License-Identifier: Apache-2.0
+	//
 	// apiVersion: apps/v1
 	// kind: Deployment
 	// metadata:
@@ -263,7 +266,7 @@ func ExampleTemplateProcessor_preprocess() {
 		},
 		// Templates
 		ResourceTemplates: []framework.ResourceTemplate{{
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -329,7 +332,7 @@ func ExampleTemplateProcessor_postprocess() {
 		// Templates input
 		TemplateData: config,
 		ResourceTemplates: []framework.ResourceTemplate{{
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -380,7 +383,7 @@ func ExampleTemplateProcessor_patch() {
 			Value string `json:"value" yaml:"value"`
 		}),
 		ResourceTemplates: []framework.ResourceTemplate{{
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -403,7 +406,7 @@ metadata:
 			&framework.ResourcePatchTemplate{
 				// patch the foo resource only
 				Selector: &framework.Selector{Names: []string{"foo"}},
-				Templates: framework.StringTemplates(`
+				Templates: parser.TemplateStrings(`
 metadata:
   annotations:
     patched: 'true'
@@ -446,7 +449,7 @@ func ExampleTemplateProcessor_MergeResources() {
 		}),
 		ResourceTemplates: []framework.ResourceTemplate{{
 			// This is the generated resource the input will patch
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -689,7 +692,7 @@ spec:
 	p := framework.TemplateProcessor{
 		PatchTemplates: []framework.PatchTemplate{
 			&framework.ContainerPatchTemplate{
-				Templates: framework.StringTemplates(`
+				Templates: parser.TemplateStrings(`
 env:
 - name: KEY
   value: {{ .Value }}
@@ -813,7 +816,7 @@ spec:
 			&framework.ContainerPatchTemplate{
 				// Only patch containers named "foo"
 				ContainerMatcher: framework.ContainerNameMatcher("foo"),
-				Templates: framework.StringTemplates(`
+				Templates: parser.TemplateStrings(`
 env:
 - name: KEY
   value: {{ .Value }}
@@ -897,7 +900,7 @@ func (a v1alpha1JavaSpringBoot) Filter(items []*yaml.RNode) ([]*yaml.RNode, erro
 	filter := framework.TemplateProcessor{
 		ResourceTemplates: []framework.ResourceTemplate{{
 			TemplateData: &a,
-			Templates: framework.StringTemplates(`
+			Templates: parser.TemplateStrings(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -960,10 +963,27 @@ func (a *v1alpha1JavaSpringBoot) Default() error {
 }
 
 func (a *v1alpha1JavaSpringBoot) Validate() error {
+	var messages []string
 	if a.Metadata.Name == "" {
-		return errors.Errorf("Name is required")
+		messages = append(messages, "name is required")
 	}
-	return nil
+	if a.Spec.Replicas > 10 {
+		messages = append(messages, "replicas must be less than 10")
+	}
+	if !strings.HasSuffix(a.Spec.Domain, "example.com") {
+		messages = append(messages, "domain must be a subdomain of example.com")
+	}
+	if strings.HasSuffix(a.Spec.Image, ":latest") {
+		messages = append(messages, "image should not have latest tag")
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	errMsg := fmt.Sprintf("JavaSpringBoot had %d errors:\n", len(messages))
+	for i, msg := range messages {
+		errMsg += fmt.Sprintf("  [%d] %s\n", i+1, msg)
+	}
+	return errors.Errorf(errMsg)
 }
 
 // ExampleVersionedAPIProcessor shows how to use the VersionedAPIProcessor and TemplateProcessor to

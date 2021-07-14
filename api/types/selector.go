@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"sigs.k8s.io/kustomize/api/resid"
+	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
 // Selector specifies a set of resources.
@@ -26,6 +26,10 @@ type Selector struct {
 	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
 	// It matches with the resource labels.
 	LabelSelector string `json:"labelSelector,omitempty" yaml:"labelSelector,omitempty"`
+}
+
+func (s *Selector) Copy() Selector {
+	return *s
 }
 
 func (s *Selector) String() string {

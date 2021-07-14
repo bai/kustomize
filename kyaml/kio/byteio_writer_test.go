@@ -26,7 +26,7 @@ func TestByteWriter(t *testing.T) {
 
 	testCases := []testCase{
 		//
-		//
+		// Test Case
 		//
 		{
 			name: "wrap_resource_list",
@@ -60,7 +60,7 @@ functionConfig:
 		},
 
 		//
-		//
+		// Test Case
 		//
 		{
 			name: "multiple_items",
@@ -88,6 +88,127 @@ g:
   - j: j1
 ---
 a: b #first
+`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "handle_comments",
+			items: []string{
+				`# comment 0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+  namespace: my-space
+  labels:
+    env: dev
+    foo: bar
+spec:
+  # comment 1
+  replicas: 3
+  selector:
+    # comment 2
+    matchLabels: # comment 3
+      # comment 4
+      app: nginx # comment 5
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # comment 6
+      containers:
+        # comment 7
+        - name: nginx
+          image: nginx:1.14.2 # comment 8
+          ports:
+            # comment 9
+            - containerPort: 80 # comment 10
+`,
+				`apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  ports:
+    # comment 1
+    - name: etcd-server-ssl
+      port: 2380
+    # comment 2
+    - name: etcd-client-ssl
+      port: 2379
+`,
+				`apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: EnforceFoo
+metadata:
+  name: enforce-foo
+spec:
+  parameters:
+    naming_rules:
+      - kind: Folder
+        patterns:
+          # comment 1
+          - ^(dev|prod|staging|qa|shared)$
+`,
+			},
+			expectedOutput: `# comment 0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx
+  namespace: my-space
+  labels:
+    env: dev
+    foo: bar
+spec:
+  # comment 1
+  replicas: 3
+  selector:
+    # comment 2
+    matchLabels: # comment 3
+      # comment 4
+      app: nginx # comment 5
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # comment 6
+      containers:
+      # comment 7
+      - name: nginx
+        image: nginx:1.14.2 # comment 8
+        ports:
+        # comment 9
+        - containerPort: 80 # comment 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  ports:
+  # comment 1
+  - name: etcd-server-ssl
+    port: 2380
+  # comment 2
+  - name: etcd-client-ssl
+    port: 2379
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: EnforceFoo
+metadata:
+  name: enforce-foo
+spec:
+  parameters:
+    naming_rules:
+    - kind: Folder
+      patterns:
+      # comment 1
+      - ^(dev|prod|staging|qa|shared)$
 `,
 		},
 
@@ -187,6 +308,199 @@ c: d # second
 metadata:
   annotations:
     config.kubernetes.io/path: "a/b/a_test.yaml"
+`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name:     "keep_annotation_seqindent",
+			instance: ByteWriter{KeepReaderAnnotations: true},
+			items: []string{
+				`a: b #first
+metadata:
+  annotations:
+    config.kubernetes.io/index: 0
+    config.kubernetes.io/path: "a/b/a_test.yaml"
+    internal.config.kubernetes.io/index: "compact"
+`,
+				`e: f
+g:
+  h:
+  - i # has a list
+  - j
+metadata:
+  annotations:
+    config.kubernetes.io/index: 0
+    config.kubernetes.io/path: "a/b/b_test.yaml"
+    internal.config.kubernetes.io/seqindent: "wide"
+`,
+				`c: d # second
+metadata:
+  annotations:
+    config.kubernetes.io/index: 1
+    config.kubernetes.io/path: "a/b/a_test.yaml"
+    internal.config.kubernetes.io/seqindent: "compact"
+`,
+			},
+
+			expectedOutput: `a: b #first
+metadata:
+  annotations:
+    config.kubernetes.io/index: 0
+    config.kubernetes.io/path: "a/b/a_test.yaml"
+    internal.config.kubernetes.io/index: "compact"
+---
+e: f
+g:
+  h:
+    - i # has a list
+    - j
+metadata:
+  annotations:
+    config.kubernetes.io/index: 0
+    config.kubernetes.io/path: "a/b/b_test.yaml"
+    internal.config.kubernetes.io/seqindent: "wide"
+---
+c: d # second
+metadata:
+  annotations:
+    config.kubernetes.io/index: 1
+    config.kubernetes.io/path: "a/b/a_test.yaml"
+    internal.config.kubernetes.io/seqindent: "compact"
+`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "encode_valid_json",
+			items: []string{
+				`{
+  "a": "a long string that would certainly see a newline introduced by the YAML marshaller abcd123",
+  metadata: {
+    annotations: {
+      config.kubernetes.io/path: test.json
+    }
+  }
+}`,
+			},
+
+			expectedOutput: `{
+  "a": "a long string that would certainly see a newline introduced by the YAML marshaller abcd123",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test.json"
+    }
+  }
+}`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "encode_valid_json_remove_seqindent_annotation",
+			items: []string{
+				`{
+  "a": "a long string that would certainly see a newline introduced by the YAML marshaller abcd123",
+  metadata: {
+    annotations: {
+      "internal.config.kubernetes.io/seqindent": "compact",
+      "config.kubernetes.io/index": "0",
+      "config.kubernetes.io/path": "test.json"
+    }
+  }
+}`,
+			},
+
+			expectedOutput: `{
+  "a": "a long string that would certainly see a newline introduced by the YAML marshaller abcd123",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test.json"
+    }
+  }
+}`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "encode_unformatted_valid_json",
+			items: []string{
+				`{ "a": "b", metadata: { annotations: { config.kubernetes.io/path: test.json } } }`,
+			},
+
+			expectedOutput: `{
+  "a": "b",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test.json"
+    }
+  }
+}`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "encode_wrapped_json_as_yaml",
+			instance: ByteWriter{
+				Sort:               true,
+				WrappingKind:       ResourceListKind,
+				WrappingAPIVersion: ResourceListAPIVersion,
+			},
+			items: []string{
+				`{
+  "a": "b",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test.json"
+    }
+  }
+}`,
+			},
+
+			expectedOutput: `apiVersion: config.kubernetes.io/v1alpha1
+kind: ResourceList
+items:
+- {"a": "b", "metadata": {"annotations": {"config.kubernetes.io/path": "test.json"}}}
+`,
+		},
+
+		//
+		// Test Case
+		//
+		{
+			name: "encode_multi_doc_json_as_yaml",
+			items: []string{
+				`{
+  "a": "b",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test-1.json"
+    }
+  }
+}`,
+				`{
+  "c": "d",
+  "metadata": {
+    "annotations": {
+      "config.kubernetes.io/path": "test-2.json"
+    }
+  }
+}`,
+			},
+
+			expectedOutput: `
+{"a": "b", "metadata": {"annotations": {"config.kubernetes.io/path": "test-1.json"}}}
+---
+{"c": "d", "metadata": {"annotations": {"config.kubernetes.io/path": "test-2.json"}}}
 `,
 		},
 	}

@@ -4,13 +4,13 @@
 package add
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
-	"sigs.k8s.io/kustomize/api/filesys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kustomize/kustomize/v4/commands/internal/kustfile"
 	testutils_test "sigs.k8s.io/kustomize/kustomize/v4/commands/internal/testutils"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 const (
@@ -23,59 +23,41 @@ sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 
 func TestAddTransformerHappyPath(t *testing.T) {
 	fSys := filesys.MakeEmptyDirInMemory()
-	fSys.WriteFile(transformerFileName, []byte(transformerFileContent))
-	fSys.WriteFile(transformerFileName+"another", []byte(transformerFileContent))
+	err := fSys.WriteFile(transformerFileName, []byte(transformerFileContent))
+	require.NoError(t, err)
+	err = fSys.WriteFile(transformerFileName+"another", []byte(transformerFileContent))
+	require.NoError(t, err)
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddTransformer(fSys)
 	args := []string{transformerFileName + "*"}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Errorf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 	content, err := testutils_test.ReadTestKustomization(fSys)
-	if err != nil {
-		t.Errorf("unexpected read error: %v", err)
-	}
-	if !strings.Contains(string(content), transformerFileName) {
-		t.Errorf("expected transformer name in kustomization")
-	}
-	if !strings.Contains(string(content), transformerFileName+"another") {
-		t.Errorf("expected transformer name in kustomization")
-	}
+	assert.NoError(t, err)
+	assert.Contains(t, string(content), transformerFileName)
+	assert.Contains(t, string(content), transformerFileName+"another")
 }
 
 func TestAddTransformerAlreadyThere(t *testing.T) {
 	fSys := filesys.MakeEmptyDirInMemory()
-	fSys.WriteFile(transformerFileName, []byte(transformerFileName))
+	err := fSys.WriteFile(transformerFileName, []byte(transformerFileName))
+	require.NoError(t, err)
 	testutils_test.WriteTestKustomization(fSys)
 
 	cmd := newCmdAddTransformer(fSys)
 	args := []string{transformerFileName}
-	err := cmd.RunE(cmd, args)
-	if err != nil {
-		t.Fatalf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 
 	// adding an existing transformer shouldn't return an error
-	err = cmd.RunE(cmd, args)
-	if err != nil {
-		t.Errorf("unexpected cmd error: %v", err)
-	}
+	assert.NoError(t, cmd.RunE(cmd, args))
 
 	// There can be only one. May it be the...
 	mf, err := kustfile.NewKustomizationFile(fSys)
-	if err != nil {
-		t.Fatalf("error retrieving kustomization file: %v", err)
-	}
+	assert.NoError(t, err)
 	m, err := mf.Read()
-	if err != nil {
-		t.Fatalf("error reading kustomization file: %v", err)
-	}
-
-	if len(m.Transformers) != 1 || m.Transformers[0] != transformerFileName {
-		t.Errorf("expected transformers [%s]; got transformers [%s]", transformerFileName, strings.Join(m.Transformers, ","))
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(m.Transformers))
+	assert.Equal(t, transformerFileName, m.Transformers[0])
 }
 
 func TestAddTransformerNoArgs(t *testing.T) {
@@ -83,27 +65,18 @@ func TestAddTransformerNoArgs(t *testing.T) {
 
 	cmd := newCmdAddTransformer(fSys)
 	err := cmd.Execute()
-	if err == nil {
-		t.Errorf("expected error: %v", err)
-	}
-	if err.Error() != "must specify a transformer file" {
-		t.Errorf("incorrect error: %v", err.Error())
-	}
+	assert.EqualError(t, err, "must specify a transformer file")
 }
 
 func TestAddTransformerMissingKustomizationYAML(t *testing.T) {
 	fSys := filesys.MakeEmptyDirInMemory()
-	fSys.WriteFile(transformerFileName, []byte(transformerFileContent))
-	fSys.WriteFile(transformerFileName+"another", []byte(transformerFileContent))
+	err := fSys.WriteFile(transformerFileName, []byte(transformerFileContent))
+	require.NoError(t, err)
+	err = fSys.WriteFile(transformerFileName+"another", []byte(transformerFileContent))
+	require.NoError(t, err)
 
 	cmd := newCmdAddTransformer(fSys)
 	args := []string{transformerFileName + "*"}
-	err := cmd.RunE(cmd, args)
-	if err == nil {
-		t.Errorf("expected error: %v", err)
-	}
-	fmt.Println(err.Error())
-	if err.Error() != "Missing kustomization file 'kustomization.yaml'.\n" {
-		t.Errorf("incorrect error: %v", err.Error())
-	}
+	err = cmd.RunE(cmd, args)
+	assert.EqualError(t, err, "Missing kustomization file 'kustomization.yaml'.\n")
 }

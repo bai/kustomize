@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
-	"sigs.k8s.io/kustomize/api/filesys"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kustomize/api/konfig"
 	"sigs.k8s.io/kustomize/api/types"
 	testutils_test "sigs.k8s.io/kustomize/kustomize/v4/commands/internal/testutils"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 func TestFieldOrder(t *testing.T) {
@@ -35,9 +35,12 @@ func TestFieldOrder(t *testing.T) {
 		"Patches",
 		"ConfigMapGenerator",
 		"SecretGenerator",
+		"HelmCharts",
+		"HelmChartInflationGenerator",
 		"GeneratorOptions",
 		"Vars",
 		"Images",
+		"Replacements",
 		"Replicas",
 		"Configurations",
 		"Generators",
@@ -123,7 +126,8 @@ configMapGenerator:
 `
 	for _, n := range konfig.RecognizedKustomizationFileNames() {
 		fSys := filesys.MakeFsInMemory()
-		fSys.WriteFile(n, []byte(kcontent))
+		err := fSys.WriteFile(n, []byte(kcontent))
+		require.NoError(t, err)
 		k, err := NewKustomizationFile(fSys)
 		if err != nil {
 			t.Fatalf("Unexpected Error: %v", err)

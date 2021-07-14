@@ -24,7 +24,7 @@ func loadRepoManager(args *arguments.Args) (*repo.Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pr.NewRepoManager(), nil
+	return pr.NewRepoManager(args.AllowedReplacements()), nil
 }
 
 func findModule(

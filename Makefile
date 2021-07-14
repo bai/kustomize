@@ -22,58 +22,48 @@ REPO_NAME := "kustomize"
 endif
 
 .PHONY: all
-all: verify-kustomize
+all: install-tools verify-kustomize
 
 .PHONY: verify-kustomize
 verify-kustomize: \
 	lint-kustomize \
 	test-unit-kustomize-all \
 	test-examples-kustomize-against-HEAD \
-	test-examples-kustomize-against-4.0
+	test-examples-kustomize-against-4.1
 
 # The following target referenced by a file in
 # https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/kustomize
 .PHONY: prow-presubmit-check
 prow-presubmit-check: \
+	install-tools \
 	lint-kustomize \
 	test-multi-module \
 	test-unit-kustomize-all \
 	test-unit-cmd-all \
 	test-go-mod \
 	test-examples-kustomize-against-HEAD \
-	test-examples-kustomize-against-4.0
+	test-examples-kustomize-against-4.1
 
 .PHONY: verify-kustomize-e2e
 verify-kustomize-e2e: test-examples-e2e-kustomize
 
 # Other builds in this repo might want a different linter version.
 # Without one Makefile to rule them all, the different makes
-# cannot assume that golanci-lint is at the version they want
-# since everything uses the same implicit GOPATH.
-# This installs in a temp dir to avoid overwriting someone else's
-# linter, then installs in MYGOBIN with a new name.
-# Version pinned by hack/go.mod
+# cannot assume that golanci-lint is at the version they want.
+# This installs what kustomize wants to use.
 $(MYGOBIN)/golangci-lint-kustomize:
-	( \
-		set -e; \
-		cd hack; \
-		GO111MODULE=on go build -tags=tools -o $(MYGOBIN)/golangci-lint-kustomize github.com/golangci/golangci-lint/cmd/golangci-lint; \
-	)
+	rm -f $(CURDIR)/hack/golangci-lint
+	GOBIN=$(CURDIR)/hack go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.23.8
+	mv $(CURDIR)/hack/golangci-lint $(MYGOBIN)/golangci-lint-kustomize
 
-# Install from version specified in api/go.mod.
 $(MYGOBIN)/mdrip:
-	cd api; \
-	go install github.com/monopole/mdrip
+	go install github.com/monopole/mdrip@v1.0.2
 
-# Install from version specified in api/go.mod.
 $(MYGOBIN)/stringer:
-	cd api; \
-	go install golang.org/x/tools/cmd/stringer
+	go get golang.org/x/tools/cmd/stringer
 
-# Install from version specified in api/go.mod.
 $(MYGOBIN)/goimports:
-	cd api; \
-	go install golang.org/x/tools/cmd/goimports
+	go get golang.org/x/tools/cmd/goimports
 
 # Build from local source.
 $(MYGOBIN)/gorepomod:
@@ -141,6 +131,7 @@ pSrc=plugin/builtin
 _builtinplugins = \
 	AnnotationsTransformer.go \
 	ConfigMapGenerator.go \
+	IAMPolicyGenerator.go \
 	HashTransformer.go \
 	ImageTagTransformer.go \
 	LabelTransformer.go \
@@ -168,6 +159,7 @@ builtinplugins = $(patsubst %,$(pGen)/%,$(_builtinplugins))
 # that file, will be recreated.
 $(pGen)/AnnotationsTransformer.go: $(pSrc)/annotationstransformer/AnnotationsTransformer.go
 $(pGen)/ConfigMapGenerator.go: $(pSrc)/configmapgenerator/ConfigMapGenerator.go
+$(pGen)/GkeSaGenerator.go: $(pSrc)/gkesagenerator/GkeSaGenerator.go
 $(pGen)/HashTransformer.go: $(pSrc)/hashtransformer/HashTransformer.go
 $(pGen)/ImageTagTransformer.go: $(pSrc)/imagetagtransformer/ImageTagTransformer.go
 $(pGen)/LabelTransformer.go: $(pSrc)/labeltransformer/LabelTransformer.go
@@ -211,7 +203,7 @@ clean-kustomize-external-go-plugin:
 ### End kustomize plugin rules.
 
 .PHONY: lint-kustomize
-lint-kustomize: install-tools $(builtinplugins)
+lint-kustomize: $(MYGOBIN)/golangci-lint-kustomize $(builtinplugins)
 	cd api; $(MYGOBIN)/golangci-lint-kustomize \
 	  -c ../.golangci-kustomize.yml \
 	  run ./...
@@ -251,10 +243,10 @@ test-unit-kustomize-all: \
 	test-unit-kustomize-plugins
 
 test-unit-cmd-all:
-	./scripts/kyaml-pre-commit.sh
+	./hack/kyaml-pre-commit.sh
 
 test-go-mod:
-	./scripts/check-go-mod.sh
+	./hack/check-go-mod.sh
 
 # Environment variables are defined at
 # https://github.com/kubernetes/test-infra/blob/master/prow/jobs.md#job-environment-variables
@@ -266,7 +258,7 @@ test-multi-module: $(MYGOBIN)/prchecker
 		export REPO_NAME=$(REPO_NAME); \
 		export PULL_NUMBER=$(PULL_NUMBER); \
 		export MODULES=$(MODULES); \
-		./scripts/check-multi-module.sh; \
+		./hack/check-multi-module.sh; \
 	)
 
 .PHONY:
@@ -284,8 +276,8 @@ test-examples-kustomize-against-HEAD: $(MYGOBIN)/kustomize $(MYGOBIN)/mdrip
 	./hack/testExamplesAgainstKustomize.sh HEAD
 
 .PHONY:
-test-examples-kustomize-against-4.0: $(MYGOBIN)/mdrip
-	./hack/testExamplesAgainstKustomize.sh v4@v4.0.5
+test-examples-kustomize-against-4.1: $(MYGOBIN)/mdrip
+	./hack/testExamplesAgainstKustomize.sh v4@v4.1.2
 
 # linux only.
 # This is for testing an example plugin that
@@ -358,8 +350,12 @@ $(MYGOBIN)/gh:
 clean: clean-kustomize-external-go-plugin
 	go clean --cache
 	rm -f $(builtinplugins)
-	rm -f $(MYGOBIN)/kustomize
+	rm -f $(MYGOBIN)/goimports
 	rm -f $(MYGOBIN)/golangci-lint-kustomize
+	rm -f $(MYGOBIN)/kustomize
+	rm -f $(MYGOBIN)/mdrip
+	rm -f $(MYGOBIN)/prchecker
+	rm -f $(MYGOBIN)/stringer
 
 # Handle pluginator manually.
 # rm -f $(MYGOBIN)/pluginator

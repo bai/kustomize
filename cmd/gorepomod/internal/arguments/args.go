@@ -26,7 +26,7 @@ var (
 
 	// TODO: make this a PATH-like flag
 	// e.g.: --excludes ".git:.idea:site:docs"
-	excSlice = []string{
+	exclusions = []string{
 		".git",
 		".github",
 		".idea",
@@ -36,6 +36,10 @@ var (
 		"plugin",
 		"releasing",
 		"site",
+	}
+	// TODO: make this a PATH-like flag
+	allowedReplacements = []string{
+		"gopkg.in/yaml.v3",
 	}
 )
 
@@ -64,6 +68,14 @@ func (a *Args) GetCommand() Command {
 	return a.cmd
 }
 
+func (a *Args) AllowedReplacements() (result []string) {
+	// Make sure the list has no repeats.
+	for k := range utils.SliceToSet(allowedReplacements) {
+		result = append(result, k)
+	}
+	return
+}
+
 func (a *Args) Bump() semver.SvBump {
 	return a.bump
 }
@@ -82,7 +94,7 @@ func (a *Args) ConditionalModule() misc.ModuleShortName {
 
 func (a *Args) Exclusions() (result []string) {
 	// Make sure the list has no repeats.
-	for k := range utils.SliceToSet(excSlice) {
+	for k := range utils.SliceToSet(exclusions) {
 		result = append(result, k)
 	}
 	return
